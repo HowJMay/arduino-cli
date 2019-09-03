@@ -24,7 +24,6 @@ import (
 
 	"github.com/arduino/arduino-cli/cli/errorcodes"
 	"github.com/arduino/arduino-cli/cli/feedback"
-	"github.com/arduino/arduino-cli/cli/globals"
 	"github.com/arduino/arduino-cli/cli/instance"
 	"github.com/arduino/arduino-cli/commands/board"
 	rpc "github.com/arduino/arduino-cli/rpc/commands"
@@ -66,27 +65,33 @@ func runListCommand(cmd *cobra.Command, args []string) {
 		os.Exit(errorcodes.ErrNetwork)
 	}
 
-	if globals.OutputFormat == "json" {
-		feedback.PrintJSON(ports)
-	} else {
-		outputListResp(ports)
-	}
+	feedback.PrintResult(result{ports})
 }
 
-func outputListResp(ports []*rpc.DetectedPort) {
-	if len(ports) == 0 {
-		feedback.Print("No boards found.")
-		return
+// ouput from this command requires special formatting, let's create a dedicated
+// feedback.Result implementation
+type result struct {
+	ports []*rpc.DetectedPort
+}
+
+func (dr result) Data() interface{} {
+	return dr.ports
+}
+
+func (dr result) String() string {
+	if len(dr.ports) == 0 {
+		return "No boards found."
 	}
-	sort.Slice(ports, func(i, j int) bool {
-		x, y := ports[i], ports[j]
+
+	sort.Slice(dr.ports, func(i, j int) bool {
+		x, y := dr.ports[i], dr.ports[j]
 		return x.GetProtocol() < y.GetProtocol() ||
 			(x.GetProtocol() == y.GetProtocol() && x.GetAddress() < y.GetAddress())
 	})
 
 	t := table.New()
 	t.SetHeader("Port", "Type", "Board Name", "FQBN")
-	for _, port := range ports {
+	for _, port := range dr.ports {
 		address := port.GetProtocol() + "://" + port.GetAddress()
 		if port.GetProtocol() == "serial" {
 			address = port.GetAddress()
@@ -111,5 +116,5 @@ func outputListResp(ports []*rpc.DetectedPort) {
 			t.AddRow(address, protocol, board, fqbn)
 		}
 	}
-	feedback.Print(t.Render())
+	return t.Render()
 }
